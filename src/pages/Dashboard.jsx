@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Eye, EyeOff, PlusCircle, List, Lock, User, KeyRound, Trash2 } from 'lucide-react'
+import { Eye, EyeOff, PlusCircle, List, Lock, User, KeyRound, Trash2, Clipboard } from 'lucide-react'
 
 const Dashboard = () => {
   const [passwords, setPasswords] = useState(() => {
@@ -151,6 +151,17 @@ const Dashboard = () => {
                       >
                         {showPwIdx === idx ? <EyeOff className="w-5 h-5 inline" /> : <Eye className="w-5 h-5 inline" />}
                       </button>
+                      <button
+                        type="button"
+                        className="ml-2 text-gray-500 hover:text-blue-600 focus:outline-none"
+                        title="Copy to clipboard"
+                        onClick={() => {
+                          navigator.clipboard.writeText(atob(entry.password))
+                          setMsg('Password copied to clipboard!')
+                        }}
+                        >
+                      <Clipboard className="w-5 h-5 inline hover:text-blue-600" />
+                        </button>
                     </td>
                     <td className="py-2 px-3 border">
                       <button
