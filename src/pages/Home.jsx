@@ -1,293 +1,183 @@
-import React, { useState, useRef } from 'react'
-import PasswordTable from './PasswordTable'
+import React, { useState, useEffect } from 'react'
+// Add Lucide icons
+import { User, Mail, Lock, Eye, EyeOff, LogIn, UserPlus, LogOut } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 const Home = () => {
-  const API_BASE = 'https://passman-app.onrender.com/api/passwords'
+  const API_BASE = 'http://localhost:8080/api/user'
 
-  const [addForm, setAddForm] = useState({ service: '', username: '', password: '' })
-  const [getService, setGetService] = useState('')
-  const [addMsg, setAddMsg] = useState('')
-  const [getResult, setGetResult] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [allPasswords, setAllPasswords] = useState([])
-  const [showAll, setShowAll] = useState(false)
-  const [allLoading, setAllLoading] = useState(false)
-  const [allError, setAllError] = useState('')
-  const [visibleIdx, setVisibleIdx] = useState(null)
-  const [originalPw, setOriginalPw] = useState({})
-  const [pwLoading, setPwLoading] = useState(false)
-  const [pwError, setPwError] = useState('')
-  const [storagePath, setStoragePath] = useState('')
-  const [storageMsg, setStorageMsg] = useState('')
-  const [loadPath, setLoadPath] = useState('')
-  const [loadMsg, setLoadMsg] = useState('')
-  const fileInputRef = useRef(null)
-  const [fileDialogOpen, setFileDialogOpen] = useState(false)
+    // const API_BASE = 'https://passman-app.onrender.com/api/user'
 
-  const handleAddChange = e => {
-    setAddForm({ ...addForm, [e.target.name]: e.target.value })
+  const [authMode, setAuthMode] = useState('login')
+  const [authForm, setAuthForm] = useState({ email: '', password: '', displayName: '', masterPassword: '' })
+  const [authMsg, setAuthMsg] = useState('')
+  const [authLoading, setAuthLoading] = useState(false)
+  const [user, setUser] = useState(null) 
+  const navigate = useNavigate();
+
+  const handleAuthChange = e => {
+    setAuthForm({ ...authForm, [e.target.name]: e.target.value })
   }
 
-  // Update all API calls to use API_BASE
-  const handleAddSubmit = async e => {
+  const handleAuthSubmit = async e => {
     e.preventDefault()
-    setLoading(true)
-    setAddMsg('')
+    setAuthLoading(true)
+    setAuthMsg('')
     try {
-      const res = await fetch(`${API_BASE}/add`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(addForm)
-      })
-      const text = await res.text()
-      setAddMsg(text)
-      setAddForm({ service: '', username: '', password: '' })
+      if (authMode === 'register') {
+        const res = await fetch(`${API_BASE}/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: authForm.email,
+            displayName: authForm.displayName,
+            masterPassword: authForm.masterPassword 
+          })
+        })
+        const text = await res.text()
+        setAuthMsg(text)
+        const profileRes = await fetch(`${API_BASE}/profile?email=${encodeURIComponent(authForm.email)}`)
+        if (profileRes.ok) {
+          const profile = await profileRes.json()
+          setUser(profile)
+        }
+      } else {
+        // Login: fetch user profile from backend
+        const res = await fetch(`${API_BASE}/profile?email=${encodeURIComponent(authForm.email)}`)
+        if (!res.ok) throw new Error('User not found')
+        const profile = await res.json()
+        setAuthMsg('Login successful!')
+        setUser(profile)
+      }
     } catch (err) {
-      setAddMsg('Error adding password')
+      setAuthMsg('Authentication failed: ' + err.message)
     }
-    setLoading(false)
+    setAuthLoading(false)
   }
 
-  const handleGetSubmit = async e => {
-    e.preventDefault()
-    setLoading(true)
-    setGetResult('')
-    try {
-      const res = await fetch(`${API_BASE}/get?service=${encodeURIComponent(getService)}`)
-      const text = await res.text()
-      setGetResult(text)
-    } catch (err) {
-      setGetResult('Error fetching password')
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard', { state: { user } });
     }
-    setLoading(false)
-  }
+  }, [user, navigate]);
 
-  const fetchAllPasswords = async () => {
-    setAllLoading(true)
-    setAllError('')
-    try {
-      const res = await fetch(`${API_BASE}/all`)
-      if (!res.ok) throw new Error('Failed to fetch')
-      const data = await res.json()
-      setAllPasswords(data)
-    } catch (err) {
-      setAllError('Error fetching all passwords')
-    }
-    setAllLoading(false)
-  }
-
-  const handleShowOriginal = async (service, username, idx) => {
-    setPwLoading(true)
-    setPwError('')
-    setVisibleIdx(idx)
-    try {
-      const res = await fetch(`${API_BASE}/get-original?service=${encodeURIComponent(service)}&username=${encodeURIComponent(username)}`)
-      if (!res.ok) throw new Error('Failed to fetch original password')
-      const text = await res.text()
-      setOriginalPw(prev => ({ ...prev, [idx]: text }))
-    } catch (err) {
-      setPwError('Error fetching original password')
-    }
-    setPwLoading(false)
-  }
-
-  // Set storage file location
-  const handleSetStorage = async e => {
-    e.preventDefault()
-    setStorageMsg('')
-    try {
-      const res = await fetch(`${API_BASE}/set-storage-file?path=${encodeURIComponent(storagePath)}`, { method: 'POST' })
-      const text = await res.text()
-      setStorageMsg(text)
-    } catch (err) {
-      setStorageMsg('Error setting storage file')
-    }
-  }
-
-  // Load passwords from file
-  const handleLoadPasswords = async e => {
-    e.preventDefault()
-    setLoadMsg('')
-    try {
-      const res = await fetch(`${API_BASE}/load-passwords?path=${encodeURIComponent(loadPath)}`, { method: 'POST' })
-      if (!res.ok) throw new Error('Failed to load passwords')
-      const data = await res.json()
-      setAllPasswords(data)
-      setLoadMsg('Passwords loaded successfully!')
-    } catch (err) {
-      setLoadMsg('Error loading passwords')
-    }
-  }
-
-  // Handle file selection for storage file
-  const handleFileSelect = e => {
-    if (e.target.files && e.target.files[0]) {
-      setStoragePath(e.target.files[0].path || e.target.files[0].name)
-      setFileDialogOpen(false)
-    }
-  }
-
-  // Open file dialog
-  const openFileDialog = () => {
-    setFileDialogOpen(true)
-    fileInputRef.current && fileInputRef.current.click()
-  }
-
-  return (
-    <div className='flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-100 to-purple-200 p-4'>
-      <div className='bg-white shadow-lg rounded-lg p-8 w-full max-w-md mb-8'>
-        <h2 className='text-2xl font-bold mb-4 text-center text-blue-700'>Add a Password</h2>
-        <form onSubmit={handleAddSubmit} className='flex flex-col gap-4'>
-          <input
-            name='service'
-            value={addForm.service}
-            onChange={handleAddChange}
-            type='text'
-            placeholder='Service (e.g. example.com)'
-            className='p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-300'
-            required
-          />
-          <input
-            name='username'
-            value={addForm.username}
-            onChange={handleAddChange}
-            type='text'
-            placeholder='Username'
-            className='p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-300'
-            required
-          />
-          <input
-            name='password'
-            value={addForm.password}
-            onChange={handleAddChange}
-            type='password'
-            placeholder='Password'
-            className='p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-300'
-            required
-          />
-          <button
-            type='submit'
-            className='bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition disabled:opacity-50'
-            disabled={loading}
-          >
-            {loading ? 'Adding...' : 'Add Password'}
-          </button>
-        </form>
-        {addMsg && <div className='mt-4 text-center text-sm text-green-600'>{addMsg}</div>}
-      </div>
-
-      <div className='bg-white shadow-lg rounded-lg p-8 w-full max-w-md mb-8'>
-        <h2 className='text-2xl font-bold mb-4 text-center text-purple-700'>Get Encrypted Password</h2>
-        <form onSubmit={handleGetSubmit} className='flex flex-col gap-4'>
-          <input
-            value={getService}
-            onChange={e => setGetService(e.target.value)}
-            type='text'
-            placeholder='Service (e.g. example.com)'
-            className='p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-300'
-            required
-          />
-          <button
-            type='submit'
-            className='bg-purple-600 text-white py-2 rounded hover:bg-purple-700 transition disabled:opacity-50'
-            disabled={loading}
-          >
-            {loading ? 'Fetching...' : 'Get Password'}
-          </button>
-        </form>
-        {getResult && (
-          <div className='mt-4 text-center text-sm break-all'>
-            <span className='font-semibold text-gray-700'>Result:</span> {getResult}
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-100/80 to-purple-200/80 p-4 backdrop-blur-sm">
+        <div className="bg-white/60 shadow-2xl rounded-3xl p-10 w-full max-w-md border border-white/30 backdrop-blur-lg">
+          <div className="flex flex-col items-center mb-6">
+            <div className="bg-blue-100/60 rounded-full p-4 mb-2 shadow-lg">
+              <User className="w-8 h-8 text-blue-600" />
+            </div>
+            <h2 className="text-3xl font-extrabold mb-1 text-center text-blue-700 drop-shadow-lg">
+              {authMode === 'register' ? 'Create Account' : 'Sign In'}
+            </h2>
+            <p className="text-gray-500 text-sm mb-2">
+              {authMode === 'register' ? 'Register to manage your passwords securely.' : 'Login to your account.'}
+            </p>
           </div>
-        )}
-      </div>
-
-      {/* Set Storage File Location */}
-      <div className='bg-white shadow-lg rounded-lg p-8 w-full max-w-md mb-8'>
-        <h2 className='text-xl font-bold mb-4 text-center text-gray-700'>Set Storage File Location</h2>
-        <form onSubmit={handleSetStorage} className='flex flex-col gap-4'>
-          <div className='flex gap-2'>
-            <input
-              value={storagePath}
-              onChange={e => setStoragePath(e.target.value)}
-              type='text'
-              placeholder='Path to passwords.json'
-              className='p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-300 flex-1'
-              required
-            />
-            <button
-              type='button'
-              className='bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 transition'
-              onClick={openFileDialog}
-            >
-              Browse
-            </button>
-            <input
-              ref={fileInputRef}
-              type='file'
-              accept='.json'
-              style={{ display: 'none' }}
-              onChange={handleFileSelect}
-            />
-          </div>
-          <button
-            type='submit'
-            className='bg-gray-700 text-white py-2 rounded hover:bg-gray-800 transition'
-          >
-            Set Storage File
-          </button>
-        </form>
-        {storageMsg && <div className='mt-2 text-center text-sm text-blue-600'>{storageMsg}</div>}
-      </div>
-
-      {/* Load Passwords from File */}
-      <div className='bg-white shadow-lg rounded-lg p-8 w-full max-w-md mb-8'>
-        <h2 className='text-xl font-bold mb-4 text-center text-gray-700'>Load Passwords from File</h2>
-        <form onSubmit={handleLoadPasswords} className='flex flex-col gap-4'>
-          <input
-            value={loadPath}
-            onChange={e => setLoadPath(e.target.value)}
-            type='text'
-            placeholder='Path to passwords.json'
-            className='p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-300'
-            required
-          />
-          <button
-            type='submit'
-            className='bg-gray-700 text-white py-2 rounded hover:bg-gray-800 transition'
-          >
-            Load Passwords
-          </button>
-        </form>
-        {loadMsg && <div className='mt-2 text-center text-sm text-blue-600'>{loadMsg}</div>}
-      </div>
-
-      <div className='bg-white shadow-lg rounded-lg p-8 w-full max-w-md'>
-        <h2 className='text-2xl font-bold mb-4 text-center text-green-700'>All Stored Passwords</h2>
-        <button
-          onClick={() => {
-            setShowAll(!showAll)
-            if (!showAll && allPasswords.length === 0) fetchAllPasswords()
-          }}
-          className='bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700 transition mb-4 w-full'
-        >
-          {showAll ? 'Hide All' : 'Show All Passwords'}
-        </button>
-        {showAll && (
-          <div>
-            {allLoading && <div className='text-center text-gray-500'>Loading...</div>}
-            {allError && <div className='text-center text-red-500'>{allError}</div>}
-            {!allLoading && !allError && (
-              <PasswordTable
-                allPasswords={allPasswords}
-                handleShowOriginal={handleShowOriginal}
-                visibleIdx={visibleIdx}
-                originalPw={originalPw}
-                pwLoading={pwLoading}
+          <form onSubmit={handleAuthSubmit} className="flex flex-col gap-5">
+            <div className="relative">
+              <Mail className="absolute left-3 top-3 w-5 h-5 text-blue-400" />
+              <input
+                name="email"
+                value={authForm.email}
+                onChange={handleAuthChange}
+                type="email"
+                placeholder="Email"
+                className="pl-10 pr-3 py-2 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white/70 backdrop-blur"
+                required
               />
+            </div>
+            <div className="relative">
+              <Lock className="absolute left-3 top-3 w-5 h-5 text-blue-400" />
+              <input
+                name="password"
+                value={authForm.password}
+                onChange={handleAuthChange}
+                type="password"
+                placeholder="Password"
+                className="pl-10 pr-3 py-2 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white/70 backdrop-blur"
+                required
+              />
+            </div>
+            {authMode === 'register' && (
+              <>
+                <div className="relative">
+                  <UserPlus className="absolute left-3 top-3 w-5 h-5 text-blue-400" />
+                  <input
+                    name="displayName"
+                    value={authForm.displayName}
+                    onChange={handleAuthChange}
+                    type="text"
+                    placeholder="Display Name"
+                    className="pl-10 pr-3 py-2 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white/70 backdrop-blur"
+                    required
+                  />
+                </div>
+                <div className="relative">
+                  <Eye className="absolute left-3 top-3 w-5 h-5 text-blue-400" />
+                  <input
+                    name="masterPassword"
+                    value={authForm.masterPassword}
+                    onChange={handleAuthChange}
+                    type="password"
+                    placeholder="Master Password (will be hashed)"
+                    className="pl-10 pr-3 py-2 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white/70 backdrop-blur"
+                    required
+                  />
+                </div>
+              </>
+            )}
+            <button
+              type="submit"
+              className="flex items-center justify-center gap-2 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 shadow-lg"
+              disabled={authLoading}
+            >
+              {authLoading ? (
+                <span className="flex items-center gap-2">
+                  {authMode === 'register' ? <UserPlus className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5 animate-spin" />}
+                  {authMode === 'register' ? 'Registering...' : 'Logging in...'}
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  {authMode === 'register' ? <UserPlus className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
+                  {authMode === 'register' ? 'Register' : 'Login'}
+                </span>
+              )}
+            </button>
+          </form>
+          <div className="mt-6 text-center text-sm">
+            {authMode === 'register' ? (
+              <>
+                Already have an account?{' '}
+                <button className="text-blue-600 underline font-semibold" onClick={() => setAuthMode('login')}>Login</button>
+              </>
+            ) : (
+              <>
+                Don&apos;t have an account?{' '}
+                <button className="text-blue-600 underline font-semibold" onClick={() => setAuthMode('register')}>Register</button>
+              </>
             )}
           </div>
-        )}
+          {authMsg && <div className="mt-4 text-center text-sm text-green-600 font-semibold drop-shadow-lg">{authMsg}</div>}
+        </div>
+      </div>
+    )
+  }
+
+  // After login/register, just show a welcome and logout
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-100/80 to-purple-200/80 p-4 backdrop-blur-sm">
+      <div className="bg-white/60 shadow-2xl rounded-3xl p-10 w-full max-w-md mb-8 border border-white/30 backdrop-blur-lg flex flex-col items-center">
+        <div className="bg-blue-100/60 rounded-full p-4 mb-2 shadow-lg">
+          <User className="w-8 h-8 text-blue-600" />
+        </div>
+        <h2 className="text-2xl font-bold mb-4 text-center text-blue-700 drop-shadow-lg">Welcome, {user.displayName || user.email}!</h2>
+        <div className="text-center text-gray-600 mb-4">UID: {user.uid}</div>
+        <button className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition shadow-lg" onClick={() => setUser(null)}>
+          <LogOut className="w-5 h-5" /> Logout
+        </button>
       </div>
     </div>
   )
